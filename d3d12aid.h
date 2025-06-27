@@ -64,12 +64,11 @@
 
 #ifndef D3D12AID_SAFE_RELEASE
 #define D3D12AID_SAFE_RELEASE(p)    \
-    do                              \
+    if (NULL != p)                  \
     {                               \
         p->Release();               \
         p = NULL;                   \
-    }                               \
-    while (0)
+    }
 #endif
 
 

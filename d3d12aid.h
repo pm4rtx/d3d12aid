@@ -124,6 +124,35 @@ D3D12AID_API D3D12_HEAP_PROPERTIES *d3d12aid_HeapProps_InitTyped(D3D12_HEAP_PROP
     return d3d12aid_HeapProps_InitTyped_WithNodeMask(outProps, heapType, 0x1u, 0x1u);
 }
 
+D3D12AID_API ID3D12Heap *d3d12aid_Heap_Create_WithHeapPropsAndFlags(ID3D12Device *device, uint64_t sizeInBytes, uint64_t alignment, const D3D12_HEAP_PROPERTIES *heapProps, D3D12_HEAP_FLAGS heapFlags)
+{
+    ID3D12Heap *heap = NULL;
+    D3D12_HEAP_DESC desc;
+    desc.SizeInBytes    = sizeInBytes;
+    desc.Properties     = *heapProps;
+    desc.Alignment      = alignment;
+    desc.Flags          = heapFlags;
+    D3D12AID_CHECK(device->CreateHeap(&desc, D3D12AID_IID_PPV_ARGS(&heap)));
+    return heap;
+}
+
+D3D12AID_API ID3D12Heap *d3d12aid_Heap_Create_WithHeapTypeAndFlags(ID3D12Device *device, uint64_t sizeInBytes, uint64_t alignment, D3D12_HEAP_TYPE heapType, D3D12_HEAP_FLAGS heapFlags)
+{
+    D3D12_HEAP_PROPERTIES heapProps;
+    return d3d12aid_Heap_Create_WithHeapPropsAndFlags(
+        device,
+        sizeInBytes,
+        alignment,
+        d3d12aid_HeapProps_InitTyped(&heapProps, heapType),
+        heapFlags
+    );
+}
+
+D3D12AID_API ID3D12Heap *d3d12aid_Heap_Create(ID3D12Device *device, uint64_t sizeInBytes, uint64_t alignment, D3D12_HEAP_TYPE heapType)
+{
+    return d3d12aid_Heap_Create_WithHeapTypeAndFlags(device, sizeInBytes, alignment, heapType, D3D12_HEAP_FLAG_NONE);
+}
+
 D3D12AID_API D3D12_RESOURCE_DESC *d3d12aid_Resource_InitAsBuffer(D3D12_RESOURCE_DESC *outDesc, uint64_t sizeInBytes)
 {
     outDesc->Dimension          = D3D12_RESOURCE_DIMENSION_BUFFER;

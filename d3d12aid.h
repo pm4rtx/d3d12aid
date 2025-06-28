@@ -85,7 +85,37 @@ D3D12AID_API ID3D12QueryHeap *d3d12aid_QueryHeap_CreateTimestamps(ID3D12Device *
     return heap;
 }
 
-D3D12AID_API void d3d12aid_Resource_InitAsBuffer(D3D12_RESOURCE_DESC *outDesc, uint64_t sizeInBytes)
+D3D12AID_API D3D12_HEAP_PROPERTIES *d3d12aid_HeapProps_InitCustom_WithNodeMask(D3D12_HEAP_PROPERTIES *outProps, D3D12_CPU_PAGE_PROPERTY cpuPageProperty, D3D12_MEMORY_POOL memoryPool, uint32_t creationNodeMask, uint32_t visibleNodeMask)
+{
+    outProps->Type                  = D3D12_HEAP_TYPE_CUSTOM;
+    outProps->CPUPageProperty       = cpuPageProperty;
+    outProps->MemoryPoolPreference  = memoryPool;
+    outProps->CreationNodeMask      = creationNodeMask;
+    outProps->VisibleNodeMask       = visibleNodeMask;
+    return outProps;
+}
+
+D3D12AID_API D3D12_HEAP_PROPERTIES *d3d12aid_HeapProps_InitCustom(D3D12_HEAP_PROPERTIES *outProps, D3D12_CPU_PAGE_PROPERTY cpuPageProperty, D3D12_MEMORY_POOL memoryPool)
+{
+    return d3d12aid_HeapProps_InitCustom_WithNodeMask(outProps, cpuPageProperty, memoryPool, 0x1u, 0x1u);
+}
+
+D3D12AID_API D3D12_HEAP_PROPERTIES *d3d12aid_HeapProps_InitTyped_WithNodeMask(D3D12_HEAP_PROPERTIES *outProps, D3D12_HEAP_TYPE heapType, uint32_t creationNodeMask, uint32_t visibleNodeMask)
+{
+    outProps->Type                  = heapType;
+    outProps->CPUPageProperty       = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+    outProps->MemoryPoolPreference  = D3D12_MEMORY_POOL_UNKNOWN;
+    outProps->CreationNodeMask      = creationNodeMask;
+    outProps->VisibleNodeMask       = visibleNodeMask;
+    return outProps;
+}
+
+D3D12AID_API D3D12_HEAP_PROPERTIES *d3d12aid_HeapProps_InitTyped(D3D12_HEAP_PROPERTIES *outProps, D3D12_HEAP_TYPE heapType)
+{
+    return d3d12aid_HeapProps_InitTyped_WithNodeMask(outProps, heapType, 0x1u, 0x1u);
+}
+
+D3D12AID_API D3D12_RESOURCE_DESC *d3d12aid_Resource_InitAsBuffer(D3D12_RESOURCE_DESC *outDesc, uint64_t sizeInBytes)
 {
     outDesc->Dimension          = D3D12_RESOURCE_DIMENSION_BUFFER;
     outDesc->Alignment          = D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
@@ -98,35 +128,120 @@ D3D12AID_API void d3d12aid_Resource_InitAsBuffer(D3D12_RESOURCE_DESC *outDesc, u
     outDesc->SampleDesc.Quality = 0;
     outDesc->Layout             = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
     outDesc->Flags              = D3D12_RESOURCE_FLAG_NONE;
+    return outDesc;
 }
 
-D3D12AID_API ID3D12Resource *d3d12aid_Resource_CreateCommittedWithHeapFlags(ID3D12Device *device, const D3D12_RESOURCE_DESC *desc, D3D12_HEAP_TYPE heapType, D3D12_HEAP_FLAGS heapFlags)
+D3D12AID_API ID3D12Resource *d3d12aid_Resource_CreateCommitted_Passthrough(ID3D12Device *device, const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES state, const D3D12_CLEAR_VALUE *clear, const D3D12_HEAP_PROPERTIES *heapProps, D3D12_HEAP_FLAGS heapFlags)
 {
-    D3D12_RESOURCE_STATES initState = D3D12_RESOURCE_STATE_COMMON;
-    D3D12_HEAP_PROPERTIES heapProps;
     ID3D12Resource *resource = NULL;
+    /**
+     *  NOTE:   according to https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-createcommittedresource :
+     *          "When you create a resource together with a D3D12_HEAP_TYPE_UPLOAD heap, you must set InitialResourceState to D3D12_RESOURCE_STATE_GENERIC_READ."
+     *          "When you create a resource together with a D3D12_HEAP_TYPE_READBACK heap, you must set InitialResourceState to D3D12_RESOURCE_STATE_COPY_DEST."
+     *
+     *          We also limit the possibility to choose Heap Type to HEAP_TYPE_DEFAULT/HEAP_TYPE_GPU_UPLOAD to prevent the following validation error:
+     *              D3D12 ERROR: ID3D12Device::CreateCommittedResource2: A texture resource cannot be created on a D3D12_HEAP_TYPE_UPLOAD
+     *              or D3D12_HEAP_TYPE_READBACK heap. Investigate CopyTextureRegion to copy texture data in CPU accessible buffers,
+     *              or investigate D3D12_HEAP_TYPE_CUSTOM and WriteToSubresource for UMA adapter optimizations, or investigate
+     *              D3D12_HEAP_TYPE_GPU_UPLOAD to create texture resource on CPU accessible heaps.
+     *              [ STATE_CREATION ERROR #638: CREATERESOURCEANDHEAP_INVALIDHEAPPROPERTIES]
+     */
+    D3D12AID_ASSERT((heapProps->Type == D3D12_HEAP_TYPE_UPLOAD && state == D3D12_RESOURCE_STATE_GENERIC_READ && desc->Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+                 || (heapProps->Type == D3D12_HEAP_TYPE_READBACK && state == D3D12_RESOURCE_STATE_COPY_DEST && desc->Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
+                 || ((heapProps->Type != D3D12_HEAP_TYPE_UPLOAD) && (heapProps->Type != D3D12_HEAP_TYPE_READBACK)));
+    /**
+     *  NOTE:   The below check make sure certain heap flags aren't set to prevent the following debug validation layer error:
+     *
+     *          ERROR: ID3D12Device::CreateCommittedResource: When creating a committed resource,
+     *          D3D12_HEAP_FLAGS must not include
+     *              D3D12_HEAP_FLAG_DENY_NON_RT_DS_TEXTURES,
+     *              D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES, or
+     *              D3D12_HEAP_FLAG_DENY_BUFFERS.
+     *          These flags will be set automatically to correspond with the committed resource type.
+     *          [ STATE_CREATION_ERROR #640: CREATERESOURCEANDHEAP_INVALIDHEAPMISCFLAGS]
+     */
+    D3D12AID_ASSERT(0 == (heapFlags & (D3D12_HEAP_FLAG_DENY_NON_RT_DS_TEXTURES | D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES | D3D12_HEAP_FLAG_DENY_BUFFERS)));
+    /**
+     *  NOTE:   Below we checks "clear" value is specified only for RT/DS resources.
+     */
+    D3D12AID_ASSERT((NULL == clear) == (0 == (desc->Flags & (D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))));
+    D3D12AID_CHECK(device->CreateCommittedResource(heapProps, heapFlags, desc, state, clear, IID_PPV_ARGS(&resource)));
+    return resource;
+}
+/**
+ *  NOTE:   The most generic helper for committed resource creation, could use it like this:
+ *
+ *          d3d12aid_Resource_CreateCommitted_WithStateHeapPropsAndFlags(device,
+ *              d3d12aid_Resource_InitAs{}(&resourceDesc, ...),
+ *              initialState,
+ *              d3d12aid_HeapProps_Init{Typed,Custom}{_WithNodeMask}(&heapPropsDesc, ...),
+ *              heapFlags
+ *          );
+ */
+D3D12AID_API ID3D12Resource *d3d12aid_Resource_CreateCommitted_WithStateHeapPropsAndFlags(ID3D12Device *device, const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES state, const D3D12_HEAP_PROPERTIES *heapProps, D3D12_HEAP_FLAGS heapFlags)
+{
+    /**
+     *  NOTE:   this checks only non-RT and non-DS textures are created through this function because RT/DS textures require initial clear value.
+     */
+    D3D12AID_ASSERT(0 == (desc->Flags & (D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)));
+    return d3d12aid_Resource_CreateCommitted_Passthrough(device, desc, state, NULL, heapProps, heapFlags);
+}
 
-    heapProps.Type                  = heapType;
-    heapProps.CPUPageProperty       = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-    heapProps.MemoryPoolPreference  = D3D12_MEMORY_POOL_UNKNOWN;
-    heapProps.CreationNodeMask      = 0x1u;
-    heapProps.VisibleNodeMask       = 0x1u;
+D3D12AID_API ID3D12Resource *d3d12aid_Resource_CreateCommitted_WithStateHeapTypeAndFlags(ID3D12Device *device, const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES state, D3D12_HEAP_TYPE heapType, D3D12_HEAP_FLAGS heapFlags)
+{
+    D3D12_HEAP_PROPERTIES heapProps;
+    return d3d12aid_Resource_CreateCommitted_WithStateHeapPropsAndFlags(device, desc, state, d3d12aid_HeapProps_InitTyped(&heapProps, heapType), heapFlags);
+}
 
+D3D12AID_API ID3D12Resource *d3d12aid_Buffer_CreateCommitted_Upload_WithHeapFlags(ID3D12Device *device, uint64_t sizeInBytes, D3D12_HEAP_FLAGS heapFlags)
+{
+    D3D12_RESOURCE_DESC desc;
+    return d3d12aid_Resource_CreateCommitted_WithStateHeapTypeAndFlags(device, d3d12aid_Resource_InitAsBuffer(&desc, sizeInBytes), D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_HEAP_TYPE_UPLOAD, heapFlags);
+}
+
+D3D12AID_API ID3D12Resource *d3d12aid_Buffer_CreateCommitted_Readback_WithHeapFlags(ID3D12Device *device, uint64_t sizeInBytes, D3D12_HEAP_FLAGS heapFlags)
+{
+    D3D12_RESOURCE_DESC desc;
+    return d3d12aid_Resource_CreateCommitted_WithStateHeapTypeAndFlags(device, d3d12aid_Resource_InitAsBuffer(&desc, sizeInBytes), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_HEAP_TYPE_READBACK, heapFlags);
+}
+
+D3D12AID_API ID3D12Resource *d3d12aid_Buffer_CreateCommitted_Upload(ID3D12Device *device, uint64_t sizeInBytes)
+{
+    return d3d12aid_Buffer_CreateCommitted_Upload_WithHeapFlags(device, sizeInBytes, D3D12_HEAP_FLAG_NONE);
+}
+
+D3D12AID_API ID3D12Resource *d3d12aid_Buffer_CreateCommitted_Readback(ID3D12Device *device, uint64_t sizeInBytes)
+{
+    return d3d12aid_Buffer_CreateCommitted_Readback_WithHeapFlags(device, sizeInBytes, D3D12_HEAP_FLAG_NONE);
+}
+
+D3D12AID_API ID3D12Resource *d3d12aid_Resource_CreateCommitted_WithStateAndHeapFlags(ID3D12Device *device, const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES state, D3D12_HEAP_FLAGS heapFlags)
+{
+    return d3d12aid_Resource_CreateCommitted_WithStateHeapTypeAndFlags(device,desc, state, D3D12_HEAP_TYPE_DEFAULT, heapFlags);
+}
+
+D3D12AID_API ID3D12Resource *d3d12aid_Resource_CreateCommitted_WithState(ID3D12Device *device, const D3D12_RESOURCE_DESC *desc, D3D12_RESOURCE_STATES state)
+{
+    return d3d12aid_Resource_CreateCommitted_WithStateHeapTypeAndFlags(device,desc, state, D3D12_HEAP_TYPE_DEFAULT, D3D12_HEAP_FLAG_NONE);
+}
+
+D3D12AID_API ID3D12Resource *d3d12aid_Resource_CreateCommitted_WithHeapTypeAndFlags(ID3D12Device *device, const D3D12_RESOURCE_DESC *desc, D3D12_HEAP_TYPE heapType, D3D12_HEAP_FLAGS heapFlags)
+{
+    D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COMMON;
     if (heapType == D3D12_HEAP_TYPE_UPLOAD)
     {
-        initState = D3D12_RESOURCE_STATE_GENERIC_READ;
+        state = D3D12_RESOURCE_STATE_GENERIC_READ;
     }
     else if (heapType == D3D12_HEAP_TYPE_READBACK)
     {
-        initState = D3D12_RESOURCE_STATE_COPY_DEST;
+        state = D3D12_RESOURCE_STATE_COPY_DEST;
     }
-    D3D12AID_CHECK(device->CreateCommittedResource(&heapProps, heapFlags, desc, initState, NULL, IID_PPV_ARGS(&resource)));
-    return resource;
+    return d3d12aid_Resource_CreateCommitted_WithStateHeapTypeAndFlags(device, desc, state, heapType, heapFlags);
 }
 
-D3D12AID_API ID3D12Resource *d3d12aid_Resource_CreateCommitted(ID3D12Device *device, const D3D12_RESOURCE_DESC *desc, D3D12_HEAP_TYPE heapType)
+D3D12AID_API ID3D12Resource *d3d12aid_Resource_CreateCommitted_WithHeapType(ID3D12Device *device, const D3D12_RESOURCE_DESC *desc, D3D12_HEAP_TYPE heapType)
 {
-    return d3d12aid_Resource_CreateCommittedWithHeapFlags(device, desc, heapType, D3D12_HEAP_FLAG_NONE);
+    return d3d12aid_Resource_CreateCommitted_WithHeapTypeAndFlags(device, desc, heapType, D3D12_HEAP_FLAG_NONE);
 }
 
 D3D12AID_API void *d3d12aid_Resource_MapSubresourceReadRange(ID3D12Resource *resource, uint32_t subresourceIdx, size_t offsetInBytes, size_t sizeInBytes)
@@ -272,7 +387,6 @@ typedef d3d12aid_Timestamps d3d12aid_Timestamps;
 
 D3D12AID_API void d3d12aid_Timestamps_Create(d3d12aid_Timestamps *outTimestamps, ID3D12Device *device, uint32_t perFrameTimestampCount, uint32_t latencyFrameCount)
 {
-    D3D12_RESOURCE_DESC bufferDesc;
     uint32_t timestampCount = perFrameTimestampCount * latencyFrameCount;
 
     outTimestamps->heap = d3d12aid_QueryHeap_CreateTimestamps(device, timestampCount);
@@ -282,9 +396,7 @@ D3D12AID_API void d3d12aid_Timestamps_Create(d3d12aid_Timestamps *outTimestamps,
      *          the reason why we don't allocate smaller buffer that could read only per-frame `count` timestamps is
      *          simplificity: we don't want to introduce any synchronisation
      */
-    d3d12aid_Resource_InitAsBuffer(&bufferDesc, sizeof(uint64_t) * timestampCount);
-
-    outTimestamps->readbackBuf = d3d12aid_Resource_CreateCommitted(device, &bufferDesc, D3D12_HEAP_TYPE_READBACK);
+    outTimestamps->readbackBuf = d3d12aid_Buffer_CreateCommitted_Readback(device, sizeof(uint64_t) * timestampCount);
 
     /** NOTE: we map the readback buffer during initialisation and unmap when destroying it. This is because D3D12 allows persistent mapping */
     outTimestamps->readbackMem = (uint64_t *)d3d12aid_Resource_MapRead(outTimestamps->readbackBuf);
@@ -373,7 +485,7 @@ D3D12AID_API void d3d12aid_MappedBuffer_Create(d3d12aid_MappedBuffer *outBuffer,
 
     for (uint32_t i = 0; i < frameCount; ++i)
     {
-        outBuffer->bufCpu[i] = d3d12aid_Resource_CreateCommitted(device, &desc, heapType);
+        outBuffer->bufCpu[i] = d3d12aid_Resource_CreateCommitted_WithHeapType(device, &desc, heapType);
     }
 
     if (heapType == D3D12_HEAP_TYPE_UPLOAD)
@@ -395,7 +507,7 @@ D3D12AID_API void d3d12aid_MappedBuffer_Create(d3d12aid_MappedBuffer *outBuffer,
     {
         desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
     }
-    outBuffer->bufGpu = d3d12aid_Resource_CreateCommitted(device, &desc, D3D12_HEAP_TYPE_DEFAULT);
+    outBuffer->bufGpu = d3d12aid_Resource_CreateCommitted_WithHeapType(device, &desc, D3D12_HEAP_TYPE_DEFAULT);
 
     outBuffer->offsInBytes  = 0;
     outBuffer->sizeInBytes  = sizeInBytes;

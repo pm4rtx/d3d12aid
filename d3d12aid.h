@@ -10,65 +10,65 @@
 #define D3D12AID_H
 
 #ifdef _MSC_VER
-    #define D3D12AID_INLINE __forceinline
+#   define D3D12AID_INLINE __forceinline
 #else
-    #ifdef __cplusplus
-        #define D3D12AID_INLINE inline
-    #else
-        #define D3D12AID_INLINE
-    #endif
+#   ifdef __cplusplus
+#       define D3D12AID_INLINE inline
+#   else
+#       define D3D12AID_INLINE
+#   endif
 #endif
 
 #ifdef __cplusplus
-    #define D3D12AID_EXTERN extern "C"
+#   define D3D12AID_EXTERN extern "C"
 #else
-    #define D3D12AID_EXTERN extern
+#   define D3D12AID_EXTERN extern
 #endif
 
 #ifndef D3D12AID_API
-    #ifdef D3D12AID_API_STATIC
-        #define D3D12AID_API static D3D12AID_INLINE
-    #else
-        #define D3D12AID_API D3D12AID_EXTERN
-    #endif
+#   ifdef D3D12AID_API_STATIC
+#       define D3D12AID_API static D3D12AID_INLINE
+#   else
+#       define D3D12AID_API D3D12AID_EXTERN
+#   endif
 #endif
 
 #ifndef D3D12AID_CHECK
-#define D3D12AID_CHECK(call)                            \
-    do                                                  \
-    {                                                   \
-        HRESULT hr = call;                              \
-        if (S_OK != hr)                                 \
-        {                                               \
-            printf("S_OK != 0x%08lx " #call "\n", hr);  \
-            if (IsDebuggerPresent())                    \
-                __debugbreak();                         \
-        }                                               \
-    }                                                   \
-    while(0)
+#   define D3D12AID_CHECK(call)                             \
+        do                                                  \
+        {                                                   \
+            HRESULT hr = call;                              \
+            if (S_OK != hr)                                 \
+            {                                               \
+                printf("S_OK != 0x%08lx " #call "\n", hr);  \
+                if (IsDebuggerPresent())                    \
+                    __debugbreak();                         \
+            }                                               \
+        }                                                   \
+        while(0)
 #endif
 
 #ifndef D3D12AID_ASSERT
-#define D3D12AID_ASSERT(cond)                               \
-    do                                                      \
-    {                                                       \
-        if (!(cond))                                        \
-        {                                                   \
-            puts("Assert with condition "#cond" failed.");  \
-            if (IsDebuggerPresent())                        \
-                __debugbreak();                             \
-        }                                                   \
-    }                                                       \
-    while(0)
+#   define D3D12AID_ASSERT(cond)                                \
+        do                                                      \
+        {                                                       \
+            if (!(cond))                                        \
+            {                                                   \
+                puts("Assert with condition "#cond" failed.");  \
+                if (IsDebuggerPresent())                        \
+                    __debugbreak();                             \
+            }                                                   \
+        }                                                       \
+        while(0)
 #endif
 
 #ifndef D3D12AID_SAFE_RELEASE
-#define D3D12AID_SAFE_RELEASE(p)    \
-    if (NULL != p)                  \
-    {                               \
-        p->Release();               \
-        p = NULL;                   \
-    }
+#   define D3D12AID_SAFE_RELEASE(p)     \
+        if (NULL != p)                  \
+        {                               \
+            p->Release();               \
+            p = NULL;                   \
+        }
 #endif
 
 #ifndef D3D12AID_IID_PPV_ARGS

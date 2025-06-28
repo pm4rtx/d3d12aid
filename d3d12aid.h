@@ -71,6 +71,15 @@
     }
 #endif
 
+#ifndef D3D12AID_IID_PPV_ARGS
+#   if defined(IID_GRAPHICS_PPV_ARGS)
+#       define D3D12AID_IID_PPV_ARGS IID_GRAPHICS_PPV_ARGS
+#   elif defined(IID_PPV_ARGS)
+#       define D3D12AID_IID_PPV_ARGS IID_PPV_ARGS
+#   else
+#       error It is expected IID_GRAPHICS_PPV_ARGS or IID_PPV_ARGS is defined.
+#   endif
+#endif
 
 D3D12AID_API ID3D12QueryHeap *d3d12aid_QueryHeap_CreateTimestamps(ID3D12Device *device, uint32_t count)
 {
@@ -81,7 +90,7 @@ D3D12AID_API ID3D12QueryHeap *d3d12aid_QueryHeap_CreateTimestamps(ID3D12Device *
     desc.Count     = count;
     desc.NodeMask  = 0x1;
 
-    D3D12AID_CHECK(device->CreateQueryHeap(&desc, IID_PPV_ARGS(&heap)));
+    D3D12AID_CHECK(device->CreateQueryHeap(&desc, D3D12AID_IID_PPV_ARGS(&heap)));
     return heap;
 }
 
@@ -165,7 +174,7 @@ D3D12AID_API ID3D12Resource *d3d12aid_Resource_CreateCommitted_Passthrough(ID3D1
      *  NOTE:   Below we checks "clear" value is specified only for RT/DS resources.
      */
     D3D12AID_ASSERT((NULL == clear) == (0 == (desc->Flags & (D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET | D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL))));
-    D3D12AID_CHECK(device->CreateCommittedResource(heapProps, heapFlags, desc, state, clear, IID_PPV_ARGS(&resource)));
+    D3D12AID_CHECK(device->CreateCommittedResource(heapProps, heapFlags, desc, state, clear, D3D12AID_IID_PPV_ARGS(&resource)));
     return resource;
 }
 /**
@@ -323,7 +332,7 @@ D3D12AID_API void d3d12aid_Resource_UavBarrier(D3D12_RESOURCE_BARRIER *outBarrie
 D3D12AID_API ID3D12RootSignature *d3d12aid_RootSignature_Create(ID3D12Device *device, const void *shaderBytecode, size_t shaderBytecodeSizeInBytes)
 {
     ID3D12RootSignature *rs = NULL;
-    D3D12AID_CHECK(device->CreateRootSignature(0x1, shaderBytecode, shaderBytecodeSizeInBytes, IID_PPV_ARGS(&rs)));
+    D3D12AID_CHECK(device->CreateRootSignature(0x1, shaderBytecode, shaderBytecodeSizeInBytes, D3D12AID_IID_PPV_ARGS(&rs)));
     return rs;
 }
 
@@ -337,7 +346,7 @@ D3D12AID_API ID3D12PipelineState *d3d12aid_PipelineState_CreateCompute(ID3D12Dev
     desc.CachedPSO.pCachedBlob            = NULL;
     desc.CachedPSO.CachedBlobSizeInBytes  = 0;
     desc.Flags                            = D3D12_PIPELINE_STATE_FLAG_NONE;
-    D3D12AID_CHECK(device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&ps)));
+    D3D12AID_CHECK(device->CreateComputePipelineState(&desc, D3D12AID_IID_PPV_ARGS(&ps)));
     return ps;
 }
 
@@ -633,7 +642,7 @@ D3D12AID_API void d3d12aid_CmdQueue_Create(d3d12aid_CmdQueue *outQueue, ID3D12De
     queueDesc.Flags     = D3D12_COMMAND_QUEUE_FLAG_NONE;
     queueDesc.NodeMask  = 0x1;
 
-    D3D12AID_CHECK(device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&outQueue->queue)));
+    D3D12AID_CHECK(device->CreateCommandQueue(&queueDesc, D3D12AID_IID_PPV_ARGS(&outQueue->queue)));
 
     outQueue->cmdAllocCount = frameCount * listCountPerFrame;
 
@@ -642,7 +651,7 @@ D3D12AID_API void d3d12aid_CmdQueue_Create(d3d12aid_CmdQueue *outQueue, ID3D12De
     /** create a fence with `outQueue->fenceValue` value set (originally set to zero, but could be set to anything) */
     outQueue->fenceValue = 0;
 
-    D3D12AID_CHECK(device->CreateFence(outQueue->fenceValue, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&outQueue->fence)));
+    D3D12AID_CHECK(device->CreateFence(outQueue->fenceValue, D3D12_FENCE_FLAG_NONE, D3D12AID_IID_PPV_ARGS(&outQueue->fence)));
 
     /** query back the completed value and advanced at the same time*/
     outQueue->fenceValue = outQueue->fence->GetCompletedValue();
@@ -659,7 +668,7 @@ D3D12AID_API void d3d12aid_CmdQueue_Create(d3d12aid_CmdQueue *outQueue, ID3D12De
 
     /** initialise the allocators with the `Type` of the queue they are bound to */
     for (uint32_t i = 0; i < outQueue->cmdAllocCount; ++i)
-        D3D12AID_CHECK(device->CreateCommandAllocator(queueDesc.Type, IID_PPV_ARGS(&outQueue->cmdAllocs[i])));
+        D3D12AID_CHECK(device->CreateCommandAllocator(queueDesc.Type, D3D12AID_IID_PPV_ARGS(&outQueue->cmdAllocs[i])));
 
     for (uint32_t i = outQueue->cmdAllocCount; i < D3D12AID_CMD_QUEUE_ALLOC_MAX_COUNT; ++i)
         outQueue->cmdAllocs[i] = NULL;
@@ -667,7 +676,7 @@ D3D12AID_API void d3d12aid_CmdQueue_Create(d3d12aid_CmdQueue *outQueue, ID3D12De
     /** initialise the lists with the `Type` and `NodeMask` of the queue they are bound to */
     for (uint32_t i = 0; i < outQueue->cmdListCount; ++i)
     {
-        D3D12AID_CHECK(device->CreateCommandList(queueDesc.NodeMask, queueDesc.Type, outQueue->cmdAllocs[i], NULL, IID_PPV_ARGS(&outQueue->cmdLists[i])));
+        D3D12AID_CHECK(device->CreateCommandList(queueDesc.NodeMask, queueDesc.Type, outQueue->cmdAllocs[i], NULL, D3D12AID_IID_PPV_ARGS(&outQueue->cmdLists[i])));
 
         outQueue->cmdLists[i]->Close();
     }

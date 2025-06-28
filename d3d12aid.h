@@ -392,6 +392,82 @@ D3D12AID_API void d3d12aid_Resource_UavBarrier(D3D12_RESOURCE_BARRIER *outBarrie
     outBarrier->UAV.pResource               = resource;
 }
 
+D3D12AID_API D3D12_SHADER_RESOURCE_VIEW_DESC *d3d12aid_SRV_InitAsInvalidBuffer(D3D12_SHADER_RESOURCE_VIEW_DESC *outDesc, uint32_t elemStart, uint32_t elemCount)
+{
+    outDesc->Format                     = DXGI_FORMAT_UNKNOWN;
+    outDesc->ViewDimension              = D3D12_SRV_DIMENSION_BUFFER;
+    outDesc->Shader4ComponentMapping    = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    outDesc->Buffer.FirstElement        = elemStart;
+    outDesc->Buffer.NumElements         = elemCount;
+    outDesc->Buffer.StructureByteStride = 0;
+    outDesc->Buffer.Flags               = D3D12_BUFFER_SRV_FLAG_NONE;
+    return outDesc;
+}
+
+D3D12AID_API D3D12_SHADER_RESOURCE_VIEW_DESC *d3d12aid_SRV_InitAsStructBuffer_WithRange(D3D12_SHADER_RESOURCE_VIEW_DESC *outDesc, uint64_t sizeInBytes, uint32_t structSizeInBytes, uint32_t structStart, uint32_t structCount)
+{
+    D3D12AID_ASSERT(0 == sizeInBytes % structSizeInBytes);
+    d3d12aid_SRV_InitAsInvalidBuffer(outDesc, structStart, structCount);
+    outDesc->Buffer.StructureByteStride = structSizeInBytes;
+    return outDesc;
+}
+
+D3D12AID_API D3D12_SHADER_RESOURCE_VIEW_DESC *d3d12aid_SRV_InitAsStructBuffer(D3D12_SHADER_RESOURCE_VIEW_DESC *outDesc, uint64_t sizeInBytes, uint32_t structSizeInBytes)
+{
+    return d3d12aid_SRV_InitAsStructBuffer_WithRange(outDesc, sizeInBytes, structSizeInBytes, 0, (uint32_t)(sizeInBytes / structSizeInBytes));
+}
+
+D3D12AID_API D3D12_SHADER_RESOURCE_VIEW_DESC *d3d12aid_SRV_InitAsTypedBuffer_WithRange(D3D12_SHADER_RESOURCE_VIEW_DESC *outDesc, uint64_t sizeInBytes, DXGI_FORMAT elemFormat, uint32_t elemSizeInBytes, uint32_t elemStart, uint32_t elemCount)
+{
+    D3D12AID_ASSERT(0 == sizeInBytes % elemSizeInBytes);
+    d3d12aid_SRV_InitAsInvalidBuffer(outDesc, elemStart, elemCount);
+    outDesc->Format = elemFormat;
+    return outDesc;
+}
+
+D3D12AID_API D3D12_SHADER_RESOURCE_VIEW_DESC *d3d12aid_SRV_InitAsTypedBuffer(D3D12_SHADER_RESOURCE_VIEW_DESC *outDesc, uint64_t sizeInBytes, DXGI_FORMAT elemFormat, uint32_t elemSizeInBytes)
+{
+    return d3d12aid_SRV_InitAsTypedBuffer_WithRange(outDesc, sizeInBytes, elemFormat, elemSizeInBytes, 0, (uint32_t)(sizeInBytes / elemSizeInBytes));
+}
+
+D3D12AID_API D3D12_UNORDERED_ACCESS_VIEW_DESC *d3d12aid_UAV_InitAsInvalidBuffer(D3D12_UNORDERED_ACCESS_VIEW_DESC *outDesc, uint32_t elemStart, uint32_t elemCount)
+{
+    outDesc->Format                     = DXGI_FORMAT_UNKNOWN;
+    outDesc->ViewDimension              = D3D12_UAV_DIMENSION_BUFFER;
+    outDesc->Buffer.FirstElement        = elemStart;
+    outDesc->Buffer.NumElements         = elemCount;
+    outDesc->Buffer.StructureByteStride = 0;
+    outDesc->Buffer.CounterOffsetInBytes= 0;
+    outDesc->Buffer.Flags               = D3D12_BUFFER_UAV_FLAG_NONE;
+    return outDesc;
+}
+
+D3D12AID_API D3D12_UNORDERED_ACCESS_VIEW_DESC *d3d12aid_UAV_InitAsStructBuffer_WithRange(D3D12_UNORDERED_ACCESS_VIEW_DESC *outDesc, uint64_t sizeInBytes, uint32_t structSizeInBytes, uint32_t structStart, uint32_t structCount)
+{
+    D3D12AID_ASSERT(0 == sizeInBytes % structSizeInBytes);
+    d3d12aid_UAV_InitAsInvalidBuffer(outDesc, structStart, structCount);
+    outDesc->Buffer.StructureByteStride = structSizeInBytes;
+    return outDesc;
+}
+
+D3D12AID_API D3D12_UNORDERED_ACCESS_VIEW_DESC *d3d12aid_UAV_InitAsStructBuffer(D3D12_UNORDERED_ACCESS_VIEW_DESC *outDesc, uint64_t sizeInBytes, uint32_t structSizeInBytes)
+{
+    return d3d12aid_UAV_InitAsStructBuffer_WithRange(outDesc, sizeInBytes, structSizeInBytes, 0, (uint32_t)(sizeInBytes / structSizeInBytes));
+}
+
+D3D12AID_API D3D12_UNORDERED_ACCESS_VIEW_DESC *d3d12aid_UAV_InitAsTypedBuffer_WithRange(D3D12_UNORDERED_ACCESS_VIEW_DESC *outDesc, uint64_t sizeInBytes, DXGI_FORMAT elemFormat, uint32_t elemSizeInBytes, uint32_t elemStart, uint32_t elemCount)
+{
+    D3D12AID_ASSERT(0 == sizeInBytes % elemSizeInBytes);
+    d3d12aid_UAV_InitAsInvalidBuffer(outDesc, elemStart, elemCount);
+    outDesc->Format = elemFormat;
+    return outDesc;
+}
+
+D3D12AID_API D3D12_UNORDERED_ACCESS_VIEW_DESC *d3d12aid_UAV_InitAsTypedBuffer(D3D12_UNORDERED_ACCESS_VIEW_DESC *outDesc, uint64_t sizeInBytes, DXGI_FORMAT elemFormat, uint32_t elemSizeInBytes)
+{
+    return d3d12aid_UAV_InitAsTypedBuffer_WithRange(outDesc, sizeInBytes, elemFormat, elemSizeInBytes, 0, (uint32_t)(sizeInBytes / elemSizeInBytes));
+}
+
 D3D12AID_API ID3D12RootSignature *d3d12aid_RootSignature_Create(ID3D12Device *device, const void *shaderBytecode, size_t shaderBytecodeSizeInBytes)
 {
     ID3D12RootSignature *rs = NULL;

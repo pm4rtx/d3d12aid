@@ -678,8 +678,29 @@ D3D12AID_API void d3d12aid_CmdQueue_Create(d3d12aid_CmdQueue *outQueue, ID3D12De
     outQueue->fenceEvent = CreateEventW(NULL, 0, 0, L"d3d12aid_CmdQueue_FenceEvent");
 }
 
+D3D12AID_API uint64_t d3d12aid_CmdQueue_GpuSignal(d3d12aid_CmdQueue *queue)
+{
+    const uint64_t submitFenceValue = queue->fenceValue ++;
+    D3D12AID_CHECK(queue->queue->Signal(queue->fence, submitFenceValue));
+    return submitFenceValue;
+}
+
+D3D12AID_API uint64_t d3d12aid_CmdQueue_CpuSignal(d3d12aid_CmdQueue *queue)
+{
+    const uint64_t submitFenceValue = queue->fenceValue ++;
+    D3D12AID_CHECK(queue->fence->Signal(submitFenceValue));
+    return submitFenceValue;
+}
+
+D3D12AID_API void d3d12aid_CmdQueue_GpuWaitForFence(d3d12aid_CmdQueue *queue, uint64_t fenceId)
+{
+    D3D12AID_ASSERT(fenceId < queue->fenceValue);
+    D3D12AID_CHECK(queue->queue->Wait(queue->fence, fenceId));
+}
+
 D3D12AID_API void d3d12aid_CmdQueue_CpuWaitForFence(d3d12aid_CmdQueue *queue, uint64_t fenceId)
 {
+    D3D12AID_ASSERT(fenceId < queue->fenceValue);
     uint64_t fenceIdCompleted = queue->fence->GetCompletedValue();
     if (fenceId > fenceIdCompleted)
     {
@@ -717,14 +738,15 @@ D3D12AID_API uint64_t d3d12aid_CmdQueue_SubmitMultiCmdLists(d3d12aid_CmdQueue *q
     uint64_t *allocReuseFenceValues = queue->cmdAllocReuseFenceValues;
     uint32_t *allocIndices = queue->cmdAllocIndices;
 
-    uint64_t submitFenceValue = queue->fenceValue ++;
+    uint64_t submitFenceValue = 0;
 
     /** close the command lists we are going to submit */
     for (uint32_t i = cmdListIdStart; i < cmdListIdStart + cmdListIdCount; ++i)
         D3D12AID_CHECK(queue->cmdLists[i]->Close());
 
     queue->queue->ExecuteCommandLists(cmdListIdCount, (ID3D12CommandList * const *)&queue->cmdLists[cmdListIdStart]);
-    D3D12AID_CHECK(queue->queue->Signal(queue->fence, submitFenceValue));
+
+    submitFenceValue = d3d12aid_CmdQueue_GpuSignal(queue);
 
     /** for each allocator associated with the submitted command list .. */
     for (uint32_t i = cmdListIdStart; i < cmdListIdStart + cmdListIdCount; ++i)

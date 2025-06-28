@@ -521,6 +521,93 @@ D3D12AID_API uint64_t d3d12aid_Timestamps_GetDelta(d3d12aid_Timestamps *timestam
     return data[timestampStopIndex] - data[timestampStartIndex];
 }
 
+struct d3d12aid_DescriptorStack
+{
+    ID3D12Device               *device;
+    ID3D12DescriptorHeap       *heap;
+    ID3D12DescriptorHeap       *heapRead;
+    D3D12_DESCRIPTOR_HEAP_TYPE  heapType;
+    uint32_t                    descCount;
+    uint32_t                    descSize;
+    uint32_t                    descUsed;
+    D3D12_CPU_DESCRIPTOR_HANDLE cpuStart;
+    D3D12_GPU_DESCRIPTOR_HANDLE gpuStart;
+    D3D12_CPU_DESCRIPTOR_HANDLE cpuStartRead;
+};
+
+typedef struct d3d12aid_DescriptorStack d3d12aid_DescriptorStack;
+
+D3D12AID_API void d3d12aid_DescriptorStack_Create(d3d12aid_DescriptorStack *outStack, ID3D12Device *device, uint32_t descCount, D3D12_DESCRIPTOR_HEAP_TYPE heapType)
+{
+    D3D12_DESCRIPTOR_HEAP_FLAGS heapFlags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    if (heapType <= D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER)
+    {
+        heapFlags |= D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    }
+    device->AddRef();
+    outStack->device        = device;
+    outStack->heap          = d3d12aid_DescriptorHeap_Create(device, descCount, heapType, heapFlags);
+    outStack->heapRead      = NULL;
+    outStack->heapType      = heapType;
+    outStack->descCount     = descCount;
+    outStack->descSize      = device->GetDescriptorHandleIncrementSize(heapType);
+    outStack->descUsed      = 0;
+    outStack->cpuStart      = d3d12aid_DescriptorHeap_GetCpuStart(outStack->heap);
+    outStack->gpuStart      = { 0 };
+    outStack->cpuStartRead  = { 0 };
+    if (heapFlags & D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE)
+    {
+        outStack->gpuStart = d3d12aid_DescriptorHeap_GetGpuStart(outStack->heap);
+    }
+    if (heapType == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV)
+    {
+        outStack->heapRead      = d3d12aid_DescriptorHeap_Create(device, descCount, heapType, D3D12_DESCRIPTOR_HEAP_FLAG_NONE);
+        outStack->cpuStartRead  = d3d12aid_DescriptorHeap_GetCpuStart(outStack->heapRead);
+    }
+}
+
+#ifndef D3D12AID_DESCRIPTOR_STACK_PUSH_CBV_SRV_UAV
+#   define D3D12AID_DESCRIPTOR_STACK_PUSH_CBV_SRV_UAV(stack, method, ...)                   \
+    do                                                                                      \
+    {                                                                                       \
+        D3D12AID_ASSERT(stack->heapType == D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);         \
+        D3D12AID_ASSERT(stack->descUsed < stack->descCount);                                \
+        const uint32_t descIdx = stack->descUsed ++;                                        \
+        const uint32_t descOfs = stack->descSize * descIdx;                                 \
+        D3D12_CPU_DESCRIPTOR_HANDLE dstHandle       = { stack->cpuStart.ptr + descOfs };    \
+        D3D12_GPU_DESCRIPTOR_HANDLE dstHandleGpu    = { stack->gpuStart.ptr + descOfs };    \
+        D3D12_CPU_DESCRIPTOR_HANDLE dstHandleRead   = { stack->cpuStartRead.ptr + descOfs };\
+        stack->device->method(__VA_ARGS__, dstHandle);                                      \
+        stack->device->method(__VA_ARGS__, dstHandleRead);                                  \
+        return dstHandleGpu;                                                                \
+    }                                                                                       \
+    while (0)
+#endif
+
+D3D12AID_API D3D12_GPU_DESCRIPTOR_HANDLE d3d12aid_DescriptorStack_PushUav(d3d12aid_DescriptorStack *inoutStack, ID3D12Resource *resource, const D3D12_UNORDERED_ACCESS_VIEW_DESC *view)
+{
+    D3D12AID_DESCRIPTOR_STACK_PUSH_CBV_SRV_UAV(inoutStack, CreateUnorderedAccessView, resource, NULL, view);
+}
+
+D3D12AID_API D3D12_GPU_DESCRIPTOR_HANDLE d3d12aid_DescriptorStack_PushSrv(d3d12aid_DescriptorStack *inoutStack, ID3D12Resource *resource, const D3D12_SHADER_RESOURCE_VIEW_DESC *view)
+{
+    D3D12AID_DESCRIPTOR_STACK_PUSH_CBV_SRV_UAV(inoutStack, CreateShaderResourceView, resource, view);
+}
+
+D3D12AID_API D3D12_GPU_DESCRIPTOR_HANDLE d3d12aid_DescriptorStack_PushCbv(d3d12aid_DescriptorStack *inoutStack, const D3D12_CONSTANT_BUFFER_VIEW_DESC *view)
+{
+    D3D12AID_DESCRIPTOR_STACK_PUSH_CBV_SRV_UAV(inoutStack, CreateConstantBufferView, view);
+}
+
+#undef D3D12AID_DESCRIPTOR_STACK_PUSH_CBV_SRV_UAV
+
+D3D12AID_API void d3d12aid_DescriptorStack_Release(d3d12aid_DescriptorStack *stack)
+{
+    D3D12AID_SAFE_RELEASE(stack->heapRead);
+    D3D12AID_SAFE_RELEASE(stack->heap);
+    D3D12AID_SAFE_RELEASE(stack->device);
+}
+
 #ifndef D3D12AID_MAPPED_BUFFER_LATENCY_FRAME_MAX_COUNT
 #define D3D12AID_MAPPED_BUFFER_LATENCY_FRAME_MAX_COUNT 3
 #endif

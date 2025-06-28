@@ -153,6 +153,40 @@ D3D12AID_API ID3D12Heap *d3d12aid_Heap_Create(ID3D12Device *device, uint64_t siz
     return d3d12aid_Heap_Create_WithHeapTypeAndFlags(device, sizeInBytes, alignment, heapType, D3D12_HEAP_FLAG_NONE);
 }
 
+D3D12AID_API ID3D12DescriptorHeap *d3d12aid_DescriptorHeap_Create(ID3D12Device *device, uint32_t descCount, D3D12_DESCRIPTOR_HEAP_TYPE heapType, D3D12_DESCRIPTOR_HEAP_FLAGS heapFlags)
+{
+    ID3D12DescriptorHeap *heap = NULL;
+    D3D12_DESCRIPTOR_HEAP_DESC desc;
+    desc.Type           = heapType;
+    desc.NumDescriptors = descCount;
+    desc.Flags          = heapFlags;
+    desc.NodeMask       = 0x1u;
+    D3D12AID_CHECK(device->CreateDescriptorHeap(&desc, D3D12AID_IID_PPV_ARGS(&heap)));
+    return heap;
+}
+
+D3D12AID_API D3D12_CPU_DESCRIPTOR_HANDLE d3d12aid_DescriptorHeap_GetCpuStart(ID3D12DescriptorHeap *heap)
+{
+#if defined(_MSC_VER) || !defined(_WIN32)
+    return heap->GetCPUDescriptorHandleForHeapStart();
+#else
+    D3D12_CPU_DESCRIPTOR_HANDLE handle;
+    heap->GetCPUDescriptorHandleForHeapStart(&handle);
+    return handle;
+#endif
+}
+
+D3D12AID_API D3D12_GPU_DESCRIPTOR_HANDLE d3d12aid_DescriptorHeap_GetGpuStart(ID3D12DescriptorHeap *heap)
+{
+#if defined(_MSC_VER) || !defined(_WIN32)
+    return heap->GetGPUDescriptorHandleForHeapStart();
+#else
+    D3D12_GPU_DESCRIPTOR_HANDLE handle;
+    heap->GetGPUDescriptorHandleForHeapStart(&handle);
+    return handle;
+#endif
+}
+
 D3D12AID_API D3D12_RESOURCE_DESC *d3d12aid_Resource_InitAsBuffer(D3D12_RESOURCE_DESC *outDesc, uint64_t sizeInBytes)
 {
     outDesc->Dimension          = D3D12_RESOURCE_DIMENSION_BUFFER;
